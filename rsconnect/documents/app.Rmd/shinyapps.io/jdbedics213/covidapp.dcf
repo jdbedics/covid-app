@@ -1,0 +1,12 @@
+name: covidapp
+title: covidapp
+username:
+account: jdbedics213
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3376678
+bundleId: 3964488
+url: https://jdbedics213.shinyapps.io/covidapp/
+when: 1607499946.61659
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,0 +1,114 @@
+---
+title: 'COVID LA County: Daily Increase in Cases by City/Neighborhood'
+runtime: shiny
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(shiny)
+library(stringr)
+library(tidyverse)
+library(plotly)
+library(janitor)
+library(lubridate)
+theme_set(theme_light())
+library(here)
+```
+
+```{r}
+# Data cleaning and processing
+county <- read_csv(here("city.csv")) %>%
+  clean_names() %>%
+  mutate(date = mdy(date)) %>%
+  filter(city != "- Under Investigation")
+
+county_raw <- county %>%
+  select(city, date, deaths, cases) %>%
+  pivot_longer(c("cases", "deaths"), names_to = "category", values_to = "numbers")  
+
+county_rate <- county %>%
+  select(city, date, death_rate, case_rate) %>%
+  pivot_longer(c("case_rate", "death_rate"), names_to = "category", values_to = "rates") %>%
+  mutate(category = fct_recode(category, cases = "case_rate", deaths = "death_rate")) 
+
+county_c <- county_rate %>%
+  #select(-cat_rate) %>%
+  left_join(county_raw, by=c("city","date","category")) %>%
+  pivot_longer(c("rates", "numbers"), names_to = "class", values_to="value") %>%
+  filter(class == "numbers" & category == "cases") %>%
+  group_by(city) %>%
+  arrange(date) %>%
+  mutate(increase = value - lag(value)) %>%#,
+         #per_ch = (diff/value)*100) %>%
+  #filter(!city == "Los Angeles")
+  #filter(str_detect(city, "^Los")) %>%
+  filter(date != "2020-11-26")
+
+top_city <- county_c %>%
+  filter(date == max(date) & category == "cases" & class == "rates") %>%
+  count(city, value, sort = TRUE) %>%
+  arrange(desc(value)) %>%
+  #head(9) %>%
+  filter(value<1000) %>%
+  pull(city)
+```
+
+```{r}
+plot_values <- function(tbl) {
+  g <- tbl %>%
+    ggplot(aes(x=date, y=increase, color=city)) +
+    geom_line() + 
+    geom_point() +
+    #stat_smooth() +
+    labs(x="Date",
+         y="Daily Increase",
+         color="") +
+    theme(axis.text.x = element_text(angle = 70, vjust = 0.5, hjust=1))
+  
+  ggplotly(g)
+}
+# yields_tidy %>%
+#   filter(code %in% c("USA", "IND")) %>%
+#   plot_yields()
+```
+
+
+
+```{r , echo=FALSE}
+inputPanel(
+  selectInput("city",
+              label = "City/Community:",
+              choices = unique(county_c$city),
+              selected = c("Los Angeles - Mar Vista", "City of Culver City"),
+              selectize = TRUE,
+              multiple = TRUE)
+ # selectInput("category",
+  #            label = "Cases/Deaths:",
+   #           choices = levels(county_c$category),
+    #          selected = "cases")#,
+   # selectInput("class",
+    #          label = "Rates/Raw-Numbers:",
+     #         choices = levels(county_c$class),
+      #        selected = "rates",
+       #       selectize = TRUE,
+        #      multiple = FALSE),
+ # radioButtons("facet_scales",
+  #            label = "",
+   #            choices = c("Free y-axis" = "free_y",
+    #                       "Shared y-axis" = "fixed"))
+)
+renderPlotly({
+  county_c %>%
+    filter(city %in% input$city) %>%
+           #category %in% input$category) %>% #,
+           #class %in% input$class) %>%
+    plot_values()
+})
+```
