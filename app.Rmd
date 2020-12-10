@@ -52,11 +52,10 @@ county_c <- county_rate %>%
   filter(date != "2020-11-26")
 
 top_city <- county_c %>%
-  filter(date == max(date) & category == "cases" & class == "rates") %>%
-  count(city, value, sort = TRUE) %>%
-  arrange(desc(value)) %>%
-  #head(9) %>%
-  filter(value<1000) %>%
+  filter(date == max(date) & city != "Los Angeles") %>%
+  count(city, increase, sort = TRUE) %>%
+  arrange(desc(increase)) %>%
+  head(5) %>%
   pull(city)
 ```
 
@@ -67,7 +66,8 @@ plot_values <- function(tbl) {
     geom_line() + 
     geom_point() +
     #stat_smooth() +
-    labs(x="Date",
+    labs(title = "Top 5 Neighborhoods + Mar Vista & Pasadena",
+         x="Date",
          y="Daily Increase",
          color="") +
     theme(axis.text.x = element_text(angle = 70, vjust = 0.5, hjust=1))
@@ -86,7 +86,7 @@ inputPanel(
   selectInput("city",
               label = "City/Community:",
               choices = unique(county_c$city),
-              selected = c("Los Angeles - Mar Vista", "City of Culver City"),
+              selected = c(top_city, "Los Angeles - Mar Vista", "Pasadena"),
               selectize = TRUE,
               multiple = TRUE)
  # selectInput("category",
