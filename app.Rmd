@@ -1,5 +1,5 @@
 ---
-title: 'COVID LA County: Daily Increase in Cases by City/Neighborhood'
+title: 'California Daily COVID Case Increase by County'
 runtime: shiny
 output: html_document
 ---
@@ -20,7 +20,83 @@ library(janitor)
 library(lubridate)
 theme_set(theme_light())
 library(here)
+library(scales)
 ```
+
+
+```{r}
+county_total <- read_csv("https://data.ca.gov/dataset/590188d5-8545-4c93-a9a0-e230f0db7290/resource/926fd08f-cc91-4828-af38-bd45de97f8c3/download/statewide_cases.csv")
+
+covid <- read_csv("https://data.ca.gov/dataset/590188d5-8545-4c93-a9a0-e230f0db7290/resource/7e477adb-d7ab-4d4b-a198-dc4c6dc634c9/download/case_demographics_ethnicity.csv")
+```
+
+
+
+```{r wrangle ethnicity names}
+# Need to fix data b/c of problems with 
+#cases
+cases_clean <- covid %>%
+  select(date, cases, race_ethnicity) %>%
+  pivot_wider(names_from = race_ethnicity, values_from=cases) %>%
+  replace_na(list(`Multi-Race` = 0, Multiracial = 0, `Native Hawaiian and other Pacific Islander` = 0, `Native Hawaiian or Pacific Islander` = 0)) %>%
+  mutate(MultiRacial = `Multi-Race` + Multiracial,
+         Native_Hawaiian = `Native Hawaiian and other Pacific Islander` + `Native Hawaiian or Pacific Islander`) %>% 
+  select(-`Multi-Race`,-Multiracial, -`Native Hawaiian and other Pacific Islander`, -`Native Hawaiian or Pacific Islander`) %>%
+  pivot_longer(c(`Latino`, `White`, `Other`, `Asian`, `Black`, `MultiRacial`, `Native_Hawaiian`, `American Indian or Alaska Native`), names_to = "ethnicity", values_to ="cases")
+
+case_diff <- cases_clean %>%
+    group_by(ethnicity) %>%
+    arrange(date) %>%
+    mutate(cases = cases - lag(cases))
+
+#deaths
+deaths_clean <- covid %>%
+  select(date, deaths, race_ethnicity) %>%
+  pivot_wider(names_from = race_ethnicity, values_from = deaths) %>%
+  replace_na(list(`Multi-Race` = 0, Multiracial = 0, `Native Hawaiian and other Pacific Islander` = 0, `Native Hawaiian or Pacific Islander` = 0)) %>%
+  mutate(MultiRacial = `Multi-Race` + Multiracial,
+         Native_Hawaiian = `Native Hawaiian and other Pacific Islander` + `Native Hawaiian or Pacific Islander`) %>% 
+  select(-`Multi-Race`,-Multiracial, -`Native Hawaiian and other Pacific Islander`, -`Native Hawaiian or Pacific Islander`) %>%
+  pivot_longer(c(`Latino`, `White`, `Other`, `Asian`, `Black`, `MultiRacial`, `Native_Hawaiian`, `American Indian or Alaska Native`), names_to = "ethnicity", values_to ="deaths")
+
+death_diff <- deaths_clean %>%
+    group_by(ethnicity) %>%
+    arrange(date) %>%
+    mutate(deaths = deaths - lag(deaths))
+
+#case percentage
+caseper_clean <- covid %>%
+  select(date, case_percentage, race_ethnicity) %>%
+  pivot_wider(names_from = race_ethnicity, values_from = case_percentage) %>%
+  replace_na(list(`Multi-Race` = 0, Multiracial = 0, `Native Hawaiian and other Pacific Islander` = 0, `Native Hawaiian or Pacific Islander` = 0)) %>%
+  mutate(MultiRacial = `Multi-Race` + Multiracial,
+         Native_Hawaiian = `Native Hawaiian and other Pacific Islander` + `Native Hawaiian or Pacific Islander`) %>% 
+  select(-`Multi-Race`,-Multiracial, -`Native Hawaiian and other Pacific Islander`, -`Native Hawaiian or Pacific Islander`) %>%
+  pivot_longer(c(`Latino`, `White`, `Other`, `Asian`, `Black`, `MultiRacial`, `Native_Hawaiian`, `American Indian or Alaska Native`), names_to = "ethnicity", values_to ="case_per")
+
+# death percentage
+deathper_clean <- covid %>%
+  select(date, death_percentage, race_ethnicity) %>%
+  pivot_wider(names_from = race_ethnicity, values_from = death_percentage) %>%
+  replace_na(list(`Multi-Race` = 0, Multiracial = 0, `Native Hawaiian and other Pacific Islander` = 0, `Native Hawaiian or Pacific Islander` = 0)) %>%
+  mutate(MultiRacial = `Multi-Race` + Multiracial,
+         Native_Hawaiian = `Native Hawaiian and other Pacific Islander` + `Native Hawaiian or Pacific Islander`) %>% 
+  select(-`Multi-Race`,-Multiracial, -`Native Hawaiian and other Pacific Islander`, -`Native Hawaiian or Pacific Islander`) %>%
+  pivot_longer(c(`Latino`, `White`, `Other`, `Asian`, `Black`, `MultiRacial`, `Native_Hawaiian`, `American Indian or Alaska Native`), names_to = "ethnicity", values_to ="death_per")
+
+
+# join them all together  
+covid_clean <- cases_clean %>%
+  left_join(deaths_clean) %>%
+  left_join(caseper_clean) %>%
+  left_join(deathper_clean)
+
+covid_eth <- death_diff %>%
+  left_join(case_diff) %>%
+  pivot_longer(c("deaths", "cases"), names_to = "data", values_to = "values") %>%
+  filter(values != "NA")
+```
+
 
 ```{r}
 # Data cleaning and processing
@@ -55,9 +131,121 @@ top_city <- county_c %>%
   filter(date == max(date) & city != "Los Angeles") %>%
   count(city, increase, sort = TRUE) %>%
   arrange(desc(increase)) %>%
-  head(5) %>%
+  head(4) %>%
   pull(city)
+
+top_county <- county_total %>%
+  filter(date == max(date)) %>%
+  count(county, newcountconfirmed, sort = TRUE) %>%
+  arrange(desc(newcountconfirmed)) %>%
+  head(5) %>%
+  pull(county)
 ```
+
+
+```{r}
+total_values <- function(tbl) {
+  d <- tbl %>%
+    ggplot(aes(x=date, y=newcountconfirmed, color=county)) +
+    geom_line() +
+    geom_smooth() +
+    geom_point(aes(text = paste("Date: ", date, "<br>County: ", county, "<br>Cases: ", newcountconfirmed)),size=1, alpha=.2) +
+    scale_y_continuous(labels = comma_format()) +
+    labs(y= "Total COVID Cases",
+       x="",
+       title = "Top 5 Counties Automatically Selected")
+  
+  ggplotly(d, tooltip = "text")
+}
+# yields_tidy %>%
+#   filter(code %in% c("USA", "IND")) %>%
+#   plot_yields()
+```
+
+
+
+```{r , echo=FALSE}
+inputPanel(
+  selectInput("county",
+              label = "CA County:",
+              choices = unique(county_total$county),
+              selected = top_county,
+              selectize = TRUE,
+              multiple = TRUE)
+ # selectInput("category",
+  #            label = "Cases/Deaths:",
+   #           choices = levels(county_c$category),
+    #          selected = "cases")#,
+   # selectInput("class",
+    #          label = "Rates/Raw-Numbers:",
+     #         choices = levels(county_c$class),
+      #        selected = "rates",
+       #       selectize = TRUE,
+        #      multiple = FALSE),
+ # radioButtons("facet_scales",
+  #            label = "",
+   #            choices = c("Free y-axis" = "free_y",
+    #                       "Shared y-axis" = "fixed"))
+)
+renderPlotly({
+  county_total %>%
+    filter(county %in% input$county) %>%
+           #category %in% input$category) %>% #,
+           #class %in% input$class) %>%
+    total_values()
+})
+```
+
+# Daily Increase in CA Covid Cases by Ethnicity
+
+```{r}
+plot_eth <- function(tbl) {
+  e <- tbl %>%
+    ggplot(aes(x=date, y=values, color=ethnicity)) +
+    geom_line() + 
+    geom_point(size=.5) +
+    scale_y_continuous(labels = comma_format()) +
+    labs(title = "",
+       x="2020",
+       y="Daily Increase",
+       color="Ethnicity") +
+    expand_limits(y = 0) 
+  
+  ggplotly(e)
+}
+# yields_tidy %>%
+#   filter(code %in% c("USA", "IND")) %>%
+#   plot_yields()
+```
+
+
+```{r , echo=FALSE}
+inputPanel(
+  selectInput("ethnicity",
+              label = "Ethnicity:",
+              choices = unique(covid_eth$ethnicity),
+              selected = c("Latino","White","Black","Asian"),
+              selectize = TRUE,
+              multiple = TRUE),
+  selectInput("data",
+              label = "Cases/Deaths:",
+              choices = unique(covid_eth$data),
+              selected = "cases",
+              selectize = TRUE,
+              multiple = FALSE)
+)
+
+renderPlotly({
+  covid_eth %>%
+    filter(ethnicity %in% input$ethnicity,
+           data %in% input$data) %>%
+    plot_eth()
+  
+})
+```
+
+
+# LA County: Daily COVID Case Increase by Neighborhood
 
 ```{r}
 plot_values <- function(tbl) {

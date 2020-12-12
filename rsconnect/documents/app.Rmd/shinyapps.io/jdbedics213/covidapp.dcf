@@ -5,8 +5,8 @@ account: jdbedics213
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 3376678
-bundleId: 3971881
+bundleId: 3978621
 url: https://jdbedics213.shinyapps.io/covidapp/
-when: 1607623748.11166
+when: 1607759751.34815
 asMultiple: FALSE
 asStatic: FALSE
